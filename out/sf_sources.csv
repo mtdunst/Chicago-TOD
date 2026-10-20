@@ -1,0 +1,13 @@
+site_type,existing_sf_source,n_sites,net_units,share_units
+Other public,County records,652,17549.7619075675,0.0321339195451715
+Other public,"Estimate: footprints, imputed stories",938,117402.47927412449,0.21496598320069668
+Other public,"Estimate: footprints, recorded stories",1015,51087.73325784424,0.09354252889008519
+Other public,Estimate: no buildings in footprint layer,13177,360104.4783993816,0.6593575683640467
+Private,County records,2678,267466.6549485497,0.7280814841700727
+Private,"Estimate: footprints, imputed stories",134,24084.903730782808,0.06556246219841824
+Private,"Estimate: footprints, recorded stories",73,5893.619630356935,0.01604325342323357
+Private,Estimate: no buildings in footprint layer,604,69912.95503637452,0.19031280020827557
+Transit-owned,County records,52,6227.386393469226,0.09810300830984711
+Transit-owned,"Estimate: footprints, imputed stories",87,19728.6158038264,0.3107943586372431
+Transit-owned,"Estimate: footprints, recorded stories",48,3105.688637622913,0.04892540449136722
+Transit-owned,Estimate: no buildings in footprint layer,915,34416.346187154624,0.5421772285615426
