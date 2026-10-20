@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Room to grow: housing near Chicago's rail stations</title>
+  <meta name="description" content="{{DESCRIPTION}}">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Room to grow: housing near Chicago's rail stations">
+  <meta property="og:description" content="{{DESCRIPTION}}">
+  <meta property="og:url" content="{{SITE_URL}}">
+  <meta property="og:image" content="{{SITE_URL}}preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Semi+Condensed:wght@600;700&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+
+  <header class="hero">
+    <h1 id="hero-title">Room to grow near Chicago's rail stations</h1>
+    <p class="lede" id="hero-lede"></p>
+    <div class="zbar" id="hero-bar" role="img"></div>
+    <div class="zkey" id="hero-key"></div>
+    <p class="hero-note">These are estimates of how many homes could fit, not a plan or a forecast.
+      <a href="#faq">How to read these numbers</a></p>
+  </header>
+
+  <section id="explore" aria-labelledby="explore-h">
+    <h2 id="explore-h">Find your station</h2>
+    <div class="picker">
+      <label for="station-search">Station name</label>
+      <input id="station-search" list="station-list" placeholder="Start typing, like Logan Square or Ravenswood" autocomplete="off">
+      <datalist id="station-list"></datalist>
+    </div>
+
+    <div class="scen" role="group" aria-label="Scenario" id="scenario-buttons"></div>
+    <p class="scen-desc" id="scenario-desc"></p>
+
+    <div class="layers" aria-label="Map layers">
+      <label><input type="checkbox" id="lyr-rail" checked> Rail lines</label>
+      <label><input type="checkbox" id="lyr-sites"> Largest sites</label>
+      <label><input type="checkbox" id="lyr-income"> Household income</label>
+      <label><input type="checkbox" id="lyr-wards"> Ward boundaries</label>
+    </div>
+
+    <div class="explore-grid">
+      <div id="map" aria-label="Map of station areas" tabindex="0"></div>
+      <aside id="profile" aria-live="polite">
+        <p class="empty">Pick a station on the map, or search above, to see what could be built there and what stands in the way.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section id="density" aria-labelledby="density-h">
+    <h2 id="density-h">What these densities look like</h2>
+    <p>The targets here are building types Chicago already has on almost every block. A fourplex is the classic
+      <span class="term" tabindex="0" data-tip="A three-story building with one or two homes per floor, common across Chicago's older neighborhoods.">four-flat</span>;
+      the courtyard building is the 1920s apartment type wrapped around a garden.</p>
+    <figure>
+      <div id="density-svg"></div>
+      <figcaption id="density-cap"></figcaption>
+    </figure>
+  </section>
+
+  <section id="levers" aria-labelledby="levers-h">
+    <h2 id="levers-h">Which decisions unlock the most homes</h2>
+    <p>Start with what today's zoning allows, then add each policy change. The longest bars are the decisions that matter most.</p>
+    <div class="ward-pick">
+      <label for="ward-select">Show</label>
+      <select id="ward-select"></select>
+      <a id="ward-print" class="print-link" hidden>Printable ward summary</a>
+    </div>
+    <div id="waterfall" class="waterfall"></div>
+  </section>
+
+  <section id="places" aria-labelledby="places-h">
+    <h2 id="places-h">Five places that tell the story</h2>
+    <div id="featured"></div>
+  </section>
+
+  <section id="faq" aria-labelledby="faq-h">
+    <h2 id="faq-h">Questions</h2>
+
+    <details>
+      <summary>Is this a forecast of what will be built?</summary>
+      <p>No. It estimates how many homes could fit under stated density targets. What actually gets built depends on the market, financing, ownership, and public decisions. Think of it as the size of the opportunity.</p>
+    </details>
+    <details>
+      <summary>Does this mean buildings would be torn down?</summary>
+      <p>The "Build on open land first" scenario counts only vacant lots and surface parking, so it involves no demolition. Other scenarios include low-value buildings that could be replaced over decades, as owners choose. Nothing here requires anyone to sell or redevelop.</p>
+    </details>
+    <details>
+      <summary>Who owns this land?</summary>
+      <p>Most sites are privately owned. Public sites belong to the City, Cook County, the Cook County Land Bank, transit agencies, Chicago Public Schools, the Chicago Housing Authority, and others. Owner names come from Cook County Assessor records; click any site on the map to see its owner.</p>
+    </details>
+    <details>
+      <summary>How sure are these numbers?</summary>
+      <p>Every figure is rounded. Existing building sizes come from County Assessor records where available. Where they aren't, mostly on public land, building size is estimated from the City's 2021 building footprints. Look for these markers:</p>
+      <ul class="conf-key">
+        <li><span class="conf conf-solid">Solid</span> based on County records</li>
+        <li><span class="conf conf-likely">Likely</span> estimated from building footprints, or land with no buildings</li>
+        <li><span class="conf conf-rough">Rough</span> estimated with the number of stories filled in from similar buildings</li>
+      </ul>
+    </details>
+    <details>
+      <summary>What do FAR, planned development, and as-of-right mean?</summary>
+      <p><span class="term" tabindex="0" data-tip="Floor area ratio: a building's total floor area divided by its lot area.">FAR</span>
+        is building size relative to the lot: a two-story building covering its whole lot has a FAR of 2.
+        A <span class="term" tabindex="0" data-tip="A site-specific zoning approval, usually for larger projects, negotiated with the City Council.">planned development</span>
+        is a custom zoning approval for a large site.
+        <span class="term" tabindex="0" data-tip="Allowed without any rezoning, variance, or special approval.">As-of-right</span>
+        means allowed under today's zoning with no special approval.</p>
+    </details>
+    <details>
+      <summary>How were the density targets chosen?</summary>
+      <p id="faq-targets"></p>
+    </details>
+  </section>
+
+  <section id="data" aria-labelledby="data-h">
+    <h2 id="data-h">Explore the data</h2>
+    <p>Full tables for every station and the largest sites, with downloads, are on the <a href="data.html">data page</a>.
+      Download directly: <a href="data/scenarios.csv">scenarios</a>, <a href="data/stations_by_scenario.csv">stations</a>, <a href="data/all_sites.csv">all sites</a>.</p>
+  </section>
+
+  <footer id="about">
+    <h2>About</h2>
+    <p id="about-text"></p>
+    <p class="note" id="about-sources">Sources: Cook County Assessor (property values, owners, building characteristics, commercial valuations); City of Chicago (zoning, building footprints, City-owned land, ward boundaries); CTA and Metra schedule data; U.S. Census Bureau (2020 Census housing counts, American Community Survey income and tenure).</p>
+    <p class="note">Limitations: building footprints date to about 2021, so newer buildings may be missing. Zoning limits are simplified. Planned developments count as zero under today's zoning, which understates what's already approved. Very large buildings that span several parcels may be credited to only one of them.</p>
+  </footer>
+
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="data/core.js"></script>
+<script src="data/rail.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
