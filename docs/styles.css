@@ -84,6 +84,7 @@ summary:focus-visible, .term:focus-visible, #map:focus-visible {
 .map-legend .row { display: flex; align-items: center; gap: 8px; }
 .map-legend .chip { width: 14px; height: 10px; display: inline-block; }
 .leaflet-popup-content { font: 400 13px/1.45 'Barlow', sans-serif; }
+.pop-note { color: var(--muted); font-size: 12px; }
 
 /* Profile */
 .p-meta { color: var(--muted); margin: 0 0 14px; }

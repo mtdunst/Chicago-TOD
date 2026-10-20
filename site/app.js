@@ -131,11 +131,15 @@
   // ---------------------------------------------------------------------------
   // Map
   // ---------------------------------------------------------------------------
-  const map = L.map('map', { preferCanvas: true, scrollWheelZoom: false }).setView([41.85, -87.68], 11);
+  // SVG rendering, not canvas: with canvas, each pane gets its own full-size
+  // canvas, and the ones on top (stations, rail) block clicks on parcels below
+  const map = L.map('map', { scrollWheelZoom: false }).setView([41.85, -87.68], 11);
+  window.TOD_MAP = map;   // handy for debugging in the browser console
   map.on('focus click', () => map.scrollWheelZoom.enable());
   map.getContainer().addEventListener('mouseleave', () => map.scrollWheelZoom.disable());
 
-  [['income', 340], ['sites', 360], ['wardsP', 370], ['rail', 380]].forEach(([n, z]) => {
+  // Parcels sit above wards and income so those filled layers can't block parcel clicks
+  [['income', 340], ['wardsP', 350], ['sites', 365], ['rail', 380]].forEach(([n, z]) => {
     map.createPane(n); map.getPane(n).style.zIndex = z;
   });
 
@@ -151,7 +155,10 @@
   function railLayer(pane) {
     return L.geoJSON(window.TOD_RAIL, {
       pane, style: railStyle,
-      onEachFeature: (f, l) => l.bindTooltip(esc(f.properties.label), { sticky: true })
+      onEachFeature: (f, l) => {
+        l.bindTooltip(esc(f.properties.label), { sticky: true });
+        l.bindPopup(`<strong>${esc(f.properties.label)}</strong>`);
+      }
     });
   }
   const rail = railLayer('rail').addTo(map);
@@ -193,6 +200,15 @@
       }).join('');
   }
 
+  // Restyle markers in place when the selection changes
+  function highlight() {
+    Object.entries(markers).forEach(([id, m]) => {
+      const sel = id === state.station;
+      m.setStyle({ weight: sel ? 3 : 1, color: sel ? '#E4002B' : '#1F2A33' });
+      if (sel) m.bringToFront();
+    });
+  }
+
   function setLabels() {
     const z = map.getZoom();
     ST.forEach(s => {
@@ -225,7 +241,11 @@
         sitesLayer = L.geoJSON(window.TOD_SITES, {
           pane: 'sites',
           style: f => ({ fillColor: TYPE_COLOR[f.properties.type], fillOpacity: 0.7, color: '#1F2A33', weight: 0.4 }),
-          onEachFeature: (f, l) => l.bindPopup(sitePopup(f.properties))
+          onEachFeature: (f, l) => {
+            l.bindPopup(sitePopup(f.properties), { maxWidth: 300 });
+            l.on('mouseover', () => l.setStyle({ weight: 2, fillOpacity: 0.85 }));
+            l.on('mouseout', () => l.setStyle({ weight: 0.4, fillOpacity: 0.7 }));
+          }
         });
         sitesLegend = L.control({ position: 'bottomleft' });
         sitesLegend.onAdd = () => {
@@ -271,8 +291,17 @@
           pane: 'wardsP',
           style: { color: '#1F2A33', weight: 1.2, fill: true, fillOpacity: 0 },
           onEachFeature: (f, l) => {
-            l.bindTooltip(`Ward ${f.properties.ward}`, { sticky: true });
-            l.on('click', () => setWard(String(f.properties.ward)));
+            const w = String(f.properties.ward);
+            l.bindTooltip(`Ward ${w}`, { sticky: true });
+            l.bindPopup(() => {
+              const W = WARDS[w];
+              if (!W) return `<strong>Ward ${w}</strong><br>No station-area sites in this ward.`;
+              const u = W.units || {};
+              return `<strong>Ward ${w}</strong><br>` +
+                ['near', 'aor', 'max'].map(k => `${esc(SC_BY[k].label)}: ${homes(u[k] || 0)}`).join('<br>') +
+                `<br><a href="${W.print_url}">Printable ward summary</a>`;
+            });
+            l.on('click', () => setWard(w));
           }
         });
       }
@@ -310,10 +339,12 @@
   function selectStation(id, move) {
     state.station = id;
     writeHash();
-    drawStations();
+    highlight();
     renderProfile(id);
     const s = ST_BY[id];
-    if (move && s) map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: !reduceMotion });
+    if (move && s) {
+      map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: !reduceMotion });
+    }
   }
 
   function renderProfile(id) {
@@ -536,6 +567,7 @@
     renderProfile(state.station);
     const s = ST_BY[state.station];
     map.setView([s.lat, s.lng], 14);
+    highlight();
   }
   need('data/sites.js').then(initPlaceMaps).catch(showLoadError);
 })();
