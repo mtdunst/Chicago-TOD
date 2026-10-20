@@ -67,6 +67,8 @@
     return lazy[src];
   }
   const $ = id => document.getElementById(id);
+  // These layers are lines and shapes only; render any stray point as nothing
+  const noPoint = (f, latlng) => L.circleMarker(latlng, { radius: 0, stroke: false, fill: false, interactive: false });
   // R's JSON writer turns one-item vectors into plain values; treat them as lists
   const arr = x => (Array.isArray(x) ? x : (x == null ? [] : [x]));
 
@@ -154,7 +156,7 @@
   });
   function railLayer(pane) {
     return L.geoJSON(window.TOD_RAIL, {
-      pane, style: railStyle,
+      pane, style: railStyle, pointToLayer: noPoint,
       onEachFeature: (f, l) => {
         l.bindTooltip(esc(f.properties.label), { sticky: true });
         l.bindPopup(`<strong>${esc(f.properties.label)}</strong>`);
@@ -225,12 +227,25 @@
   map.on('zoomend', setLabels);
 
   // ---- Optional layers -------------------------------------------------------
+  const INST_FILL = '#C9CED2';
   function sitePopup(p) {
+    if (p.inst) {
+      return `<strong>${esc(p.inst)}</strong><br>` +
+        `<span class="pop-note">Shown for reference only. Schools and college campuses are not considered in any of these redevelopment scenarios, even if there are opportunities for more density in partnership with these organizations.</span>`;
+    }
     return `<strong>${esc(p.owner)}</strong><br>${esc(p.type)} land near ${esc(p.station)}<br>` +
       `${p.acres} acres, ${esc(TIER[p.tier] || 'site')}<br>` +
       `Could hold ${homes(p.units)}; today's zoning allows ${p.allowed < 50 ? 'few or none' : 'about ' + approx(p.allowed)}<br>` +
       `${esc(p.status)}${p.zoning ? ' (' + esc(p.zoning) + ')' : ''}<br>` +
       `Building data: ${confTag(p.conf)}${p.campus ? '<br>Active campus' : ''}`;
+  }
+
+  // Active schools and campuses: flat grey with a dashed edge, clearly "not this"
+  function siteStyle(p, hover) {
+    if (p.inst) return { fillColor: INST_FILL, fillOpacity: hover ? 0.75 : 0.55, color: '#8A97A3',
+                         weight: hover ? 1.5 : 0.8, dashArray: '3 3' };
+    return { fillColor: TYPE_COLOR[p.type], fillOpacity: hover ? 0.85 : 0.7, color: '#1F2A33',
+             weight: hover ? 2 : 0.4, dashArray: null };
   }
 
   let sitesLayer = null, sitesLegend = null;
@@ -239,19 +254,20 @@
       await need('data/sites.js');
       if (!sitesLayer) {
         sitesLayer = L.geoJSON(window.TOD_SITES, {
-          pane: 'sites',
-          style: f => ({ fillColor: TYPE_COLOR[f.properties.type], fillOpacity: 0.7, color: '#1F2A33', weight: 0.4 }),
+          pane: 'sites', pointToLayer: noPoint,
+          style: f => siteStyle(f.properties, false),
           onEachFeature: (f, l) => {
             l.bindPopup(sitePopup(f.properties), { maxWidth: 300 });
-            l.on('mouseover', () => l.setStyle({ weight: 2, fillOpacity: 0.85 }));
-            l.on('mouseout', () => l.setStyle({ weight: 0.4, fillOpacity: 0.7 }));
+            l.on('mouseover', () => l.setStyle(siteStyle(f.properties, true)));
+            l.on('mouseout', () => l.setStyle(siteStyle(f.properties, false)));
           }
         });
         sitesLegend = L.control({ position: 'bottomleft' });
         sitesLegend.onAdd = () => {
           const d = L.DomUtil.create('div', 'map-legend');
           d.innerHTML = '<div><strong>Site owner</strong></div>' + Object.entries(TYPE_COLOR)
-            .map(([k, c]) => `<div class="row"><span class="chip" style="background:${c}"></span>${k}</div>`).join('');
+            .map(([k, c]) => `<div class="row"><span class="chip" style="background:${c}"></span>${k}</div>`).join('') +
+            `<div class="row"><span class="chip" style="background:${INST_FILL};outline:1px dashed #8A97A3"></span>Active school or campus (not counted)</div>`;
           return d;
         };
       }
@@ -266,7 +282,7 @@
       await need('data/tracts.js');
       if (!incomeLayer) {
         incomeLayer = L.geoJSON(window.TOD_TRACTS, {
-          pane: 'income',
+          pane: 'income', pointToLayer: noPoint,
           style: f => ({ fillColor: INC[f.properties.bin] || '#ccc', fillOpacity: 0.55, weight: 0 }),
           onEachFeature: (f, l) => l.bindTooltip(`Median household income about $${approx(f.properties.income)}`, { sticky: true })
         });
@@ -288,7 +304,7 @@
       await need('data/wards.js');
       if (!wardsLayer) {
         wardsLayer = L.geoJSON(window.TOD_WARDS, {
-          pane: 'wardsP',
+          pane: 'wardsP', pointToLayer: noPoint,
           style: { color: '#1F2A33', weight: 1.2, fill: true, fillOpacity: 0 },
           onEachFeature: (f, l) => {
             const w = String(f.properties.ward);
@@ -347,6 +363,53 @@
     }
   }
 
+  // ---- Line-color bullets: which rail lines pass within ~100 m of a station ----
+  function segDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
+    let t = len ? ((px - ax) * dx + (py - ay) * dy) / len : 0;
+    t = Math.max(0, Math.min(1, t));
+    const x = ax + t * dx - px, y = ay + t * dy - py;
+    return Math.sqrt(x * x + y * y);
+  }
+  const flairCache = {};
+  function lineColors(s) {
+    if (flairCache[s.id]) return flairCache[s.id];
+    const feats = (window.TOD_RAIL && window.TOD_RAIL.features) || [];
+    const kx = 111320 * Math.cos(s.lat * Math.PI / 180), ky = 110540;   // meters per degree
+    const px = s.lng * kx, py = s.lat * ky;
+    const out = [];
+    feats.forEach(f => {
+      const p = f.properties || {}, g = f.geometry;
+      if (!g || !String(s.modes).includes(p.agency)) return;   // CTA stations get CTA lines, etc.
+      const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+      const hit = lines.some(ln => ln.some((c, i) => i > 0 &&
+        segDist(px, py, ln[i - 1][0] * kx, ln[i - 1][1] * ky, c[0] * kx, c[1] * ky) < 100));
+      if (hit && !out.some(o => o.color === p.color)) out.push({ color: p.color, label: p.label });
+    });
+    return (flairCache[s.id] = out);
+  }
+  const flair = s => {
+    const cols = lineColors(s);
+    const dots = cols.length ? cols : [{ color: '#9AA6AF', label: s.modes }];   // fallback dot
+    return `<span class="flair" aria-hidden="true">${dots
+      .map(c => `<i style="background:${c.color}" title="${esc(c.label)}"></i>`).join('')}</span>`;
+  };
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+
+  // ---- Startup panel: the five stations gaining the most homes at full build-out ----
+  function renderTopList() {
+    const top = ST.slice().sort((a, b) => (b.units.max || 0) - (a.units.max || 0)).slice(0, 5);
+    $('profile').innerHTML = `
+      <p class="p-sec">Most new homes at full build-out</p>
+      <ol class="top-st">${top.map(s => `<li><button type="button" class="top-st-btn" data-id="${s.id}">
+          ${flair(s)}<span class="nm">${esc(s.name)}</span>
+          <span class="sub">${cap(homes(s.units.max || 0))}${s.homes_today ? `, beside about ${approx(s.homes_today)} there today` : ''}</span>
+        </button></li>`).join('')}</ol>
+      <p class="note">Pick any station on the map, or search above, to see what could be built there and what stands in the way.</p>`;
+    $('profile').querySelectorAll('.top-st-btn')
+      .forEach(b => b.addEventListener('click', () => selectStation(b.dataset.id, true)));
+  }
+
   function renderProfile(id) {
     const s = ST_BY[id];
     const el = $('profile');
@@ -385,7 +448,7 @@
     }).filter(Boolean).join(', ');
 
     el.innerHTML = `
-      <h3>${esc(s.name)}</h3>
+      <h3>${flair(s)} ${esc(s.name)}</h3>
       <p class="p-meta">${esc(TYPOLOGY[s.typology] || s.typology)}, ${esc(s.modes)}${arr(s.wards).length ? ', Ward ' + arr(s.wards).join(', ') : ''}</p>
       <p class="p-context">${ctx.join(' ')}</p>
       <p class="p-sec">New homes that could fit here</p>
@@ -396,9 +459,13 @@
       ${top ? `<p class="p-sec">Largest sites</p><ul class="top-sites">${top}</ul>` : ''}
       <div class="p-actions">
         <button type="button" id="copy-link">Copy link to this station</button>
+        <button type="button" id="show-top">Back to top stations</button>
         ${wardLinks ? `<span>${wardLinks}</span>` : ''}
       </div>`;
 
+    $('show-top').addEventListener('click', () => {
+      state.station = null; writeHash(); highlight(); renderTopList();
+    });
     $('copy-link').addEventListener('click', async e => {
       try { await navigator.clipboard.writeText(location.href); e.target.textContent = 'Link copied'; }
       catch (_) { window.prompt('Copy this link:', location.href); }
@@ -557,12 +624,21 @@
   // ---------------------------------------------------------------------------
   // About + start
   // ---------------------------------------------------------------------------
+  if (S.set_aside && $('faq-setaside')) {
+    const a = S.set_aside;
+    $('faq-setaside').textContent =
+      `No. ${nf.format(a.schools)} active Chicago Public Schools sites and ${nf.format(a.campuses)} public university and college ` +
+      `campus parcels, roughly ${approx(a.acres)} acres in all, are left out of every number on this page. ` +
+      `They appear in grey on the map when the largest-sites layer is on. Closed or vacant school land is still counted.`;
+  }
+
   $('about-text').innerHTML =
     `Prepared by ${esc(S.author)}, ${esc(S.generated)}. Every figure is a rounded estimate of capacity, not a forecast. ` +
     `The code and full methods are <a href="${esc(S.repo_url)}">on GitHub</a>.`;
 
   setScenario(state.scenario);
   setWard('');
+  if (!state.station) renderTopList();
   if (state.station) {
     renderProfile(state.station);
     const s = ST_BY[state.station];
