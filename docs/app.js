@@ -67,6 +67,8 @@
     return lazy[src];
   }
   const $ = id => document.getElementById(id);
+  // R's JSON writer turns one-item vectors into plain values; treat them as lists
+  const arr = x => (Array.isArray(x) ? x : (x == null ? [] : [x]));
 
   // ---------------------------------------------------------------------------
   // State and shareable links (#station=...&scenario=...)
@@ -346,14 +348,14 @@
         <div>${esc(t.status)} ${confTag(t.conf)}</div>
       </li>`).join('');
 
-    const wardLinks = (s.wards || []).map(w => {
+    const wardLinks = arr(s.wards).map(w => {
       const W = WARDS[String(w)];
       return W ? `<a href="${W.print_url}">Ward ${w} summary</a>` : '';
     }).filter(Boolean).join(', ');
 
     el.innerHTML = `
       <h3>${esc(s.name)}</h3>
-      <p class="p-meta">${esc(TYPOLOGY[s.typology] || s.typology)}, ${esc(s.modes)}${(s.wards || []).length ? ', Ward ' + s.wards.join(', ') : ''}</p>
+      <p class="p-meta">${esc(TYPOLOGY[s.typology] || s.typology)}, ${esc(s.modes)}${arr(s.wards).length ? ', Ward ' + arr(s.wards).join(', ') : ''}</p>
       <p class="p-context">${ctx.join(' ')}</p>
       <p class="p-sec">New homes that could fit here</p>
       <div class="sbars">${bars}</div>
@@ -471,9 +473,9 @@
   });
 
   function featureStation(f) {
-    if (f.station_ids && f.station_ids.length) return f.station_ids[0];
+    if (arr(f.station_ids).length) return String(arr(f.station_ids)[0]);
     const site = (window.TOD_SITES ? window.TOD_SITES.features : [])
-      .find(x => (f.site_ids || []).includes(x.properties.id));
+      .find(x => arr(f.site_ids).map(String).includes(String(x.properties.id)));
     const s = site && ST_BY_NAME[String(site.properties.station).toLowerCase()];
     return s ? s.id : null;
   }
@@ -490,6 +492,12 @@
 
   function initPlaceMaps() {
     D.featured.forEach(f => {
+      try { initPlaceMap(f); }
+      catch (err) { console.error('Featured map "' + f.key + '" failed:', err); }
+    });
+  }
+  function initPlaceMap(f) {
+    {
       const m = L.map('place-' + f.key, {
         zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
         boxZoom: false, keyboard: false, touchZoom: false, attributionControl: true, preferCanvas: true
@@ -498,21 +506,21 @@
       m.createPane('rail'); m.getPane('rail').style.zIndex = 380;
       railLayer('rail').addTo(m);
       const group = L.featureGroup().addTo(m);
-      const ids = new Set(f.site_ids || []);
+      const ids = new Set(arr(f.site_ids).map(String));
       if (ids.size && window.TOD_SITES) {
-        L.geoJSON({ type: 'FeatureCollection', features: window.TOD_SITES.features.filter(x => ids.has(x.properties.id)) },
+        L.geoJSON({ type: 'FeatureCollection', features: window.TOD_SITES.features.filter(x => ids.has(String(x.properties.id))) },
           { style: { color: '#E4002B', weight: 2, fillColor: '#E4002B', fillOpacity: 0.35 } }).addTo(group);
       }
-      (f.station_ids || []).forEach(id => {
-        const s = ST_BY[id];
+      arr(f.station_ids).forEach(id => {
+        const s = ST_BY[String(id)];
         if (s) L.circleMarker([s.lat, s.lng], { radius: 9, color: '#1F2A33', weight: 1.5, fillColor: '#41B6E6', fillOpacity: 0.9 })
           .bindTooltip(esc(s.name), { permanent: true, direction: 'right', className: 'st-label' }).addTo(group);
       });
       if (group.getLayers().length) {
         const b = group.getBounds();
-        if (b.isValid()) m.fitBounds(b.pad(f.station_ids && f.station_ids.length > 1 ? 0.25 : 1.2), { maxZoom: 15 });
+        if (b.isValid()) m.fitBounds(b.pad(arr(f.station_ids).length > 1 ? 0.25 : 1.2), { maxZoom: 15 });
       } else m.setView([41.85, -87.68], 11);
-    });
+    }
   }
 
   // ---------------------------------------------------------------------------
