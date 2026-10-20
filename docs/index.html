@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Room to grow: housing near Chicago's rail stations</title>
-  <meta name="description" content="About 420,000 new homes could fit on open land near Chicago's L and Metra stations. See what could be built near your station and which decisions would unlock it.">
+  <meta name="description" content="{{DESCRIPTION}}">
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="Room to grow: housing near Chicago's rail stations">
-  <meta property="og:description" content="About 420,000 new homes could fit on open land near Chicago's L and Metra stations. See what could be built near your station and which decisions would unlock it.">
-  <meta property="og:url" content="https://mtdunst.github.io/Chicago-TOD/">
-  <meta property="og:image" content="https://mtdunst.github.io/Chicago-TOD/preview.png">
+  <meta property="og:description" content="{{DESCRIPTION}}">
+  <meta property="og:url" content="{{SITE_URL}}">
+  <meta property="og:image" content="{{SITE_URL}}preview.png">
   <meta name="twitter:card" content="summary_large_image">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,12 +18,15 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Semi+Condensed:wght@600;700&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="favicon.png">
 </head>
 <body>
 <main>
 
   <header class="hero">
     <h1 id="hero-title">Room to grow near Chicago's rail stations</h1>
+    <p class="byline">By Michael Dunst (<a href="https://www.linkedin.com/in/michael-dunst/">connect with me on LinkedIn</a>)</p>
+    <p class="disclaimer">This is an independent project, not affiliated with any employer, and the views are my own.</p>
     <p class="lede" id="hero-lede"></p>
     <div class="zbar" id="hero-bar" role="img"></div>
     <div class="zkey" id="hero-key"></div>
@@ -48,6 +51,8 @@
       <label><input type="checkbox" id="lyr-income"> Household income</label>
       <label><input type="checkbox" id="lyr-wards"> Ward boundaries</label>
     </div>
+    <p class="note map-note">Circles are sized within each scenario, so compare stations within one scenario rather than
+      the same-size circle across scenarios. The legend shows the scale for the scenario you've picked.</p>
 
     <div class="explore-grid">
       <div id="map" aria-label="Map of station areas" tabindex="0"></div>
@@ -94,6 +99,10 @@
     <details>
       <summary>Does this mean buildings would be torn down?</summary>
       <p>The "Build on open land first" scenario counts only vacant lots and surface parking, so it involves no demolition. Other scenarios include low-value buildings that could be replaced over decades, as owners choose. Nothing here requires anyone to sell or redevelop.</p>
+    </details>
+    <details>
+      <summary>Are schools and campuses counted as places to build?</summary>
+      <p id="faq-setaside">No. Active schools and public university and college campuses are left out of every number on this page, and appear in grey on the map. Closed or vacant school land is still counted.</p>
     </details>
     <details>
       <summary>Who owns this land?</summary>
