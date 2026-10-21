@@ -288,6 +288,15 @@
 
   // ---- Optional layers -------------------------------------------------------
   const INST_FILL = '#C9CED2';
+
+  // Planned developments: link to the PD ordinance, which may already allow housing
+  const pdNum = z => { const m = /^PD\s*-?\s*(\d+)/i.exec(String(z || '').trim()); return m ? m[1] : null; };
+  const pdUrl = n => `https://gisapps.chicago.gov/gisimages/zoning_pds/PD${n}.pdf`;
+  function pdNote(z) {
+    const n = pdNum(z);
+    return n ? `<br><span class="pop-note">This site is in Planned Development ${n}. Its approved plan may already allow ` +
+      `housing beyond what's counted here. <a href="${pdUrl(n)}" target="_blank" rel="noopener">Read the PD ordinance (PDF)</a></span>` : '';
+  }
   function sitePopup(p) {
     if (p.inst) {
       return `<strong>${esc(p.inst)}</strong><br>` +
@@ -297,7 +306,8 @@
       `${p.acres} acres, ${esc(TIER[p.tier] || 'site')}<br>` +
       `Could hold ${homes(p.units)}; today's zoning allows ${p.allowed < 50 ? 'few or none' : 'about ' + approx(p.allowed)}<br>` +
       `${esc(p.status)}${p.zoning ? ' (' + esc(p.zoning) + ')' : ''}<br>` +
-      `Building data: ${confTag(p.conf)}${p.campus ? '<br>Active campus' : ''}`;
+      `Building data: ${confTag(p.conf)}${p.campus ? '<br>Active campus' : ''}` +
+      pdNote(p.zoning);
   }
 
   // Active schools and campuses: flat grey with a dashed edge, clearly "not this"
@@ -418,12 +428,12 @@
     const st = ST_BY[state.station];
     if (p.r === 'o') return `<strong>Not counted as a redevelopment site</strong><br>` +
       `<span class="pop-note">Already built up for its location, or excluded: parks, condominiums, rail and street right-of-way, cemeteries, and similar.</span>` +
-      (p.z ? `<br>Zoning: ${esc(p.z)}` : '');
+      (p.z ? `<br>Zoning: ${esc(p.z)}` : '') + pdNote(p.z);
     if (p.r === 'i') return sitePopup({ inst: p.inst });
     if (p.r === 'f') {
       const u = Math.round(p.u || 0), a = Math.round(p.a || 0);
       return `<strong>Single-family lot</strong><br>As a fourplex: ${u} new ${u === 1 ? 'home' : 'homes'}<br>` +
-        `Today's zoning allows ${a < 1 ? 'no' : a} more${p.z ? '<br>Zoning: ' + esc(p.z) : ''}`;
+        `Today's zoning allows ${a < 1 ? 'no' : a} more${p.z ? '<br>Zoning: ' + esc(p.z) : ''}` + pdNote(p.z);
     }
     return sitePopup({ owner: p.o || 'Owner not listed', type: ROLE[p.r].type, station: st ? st.name : '',
                        acres: p.ac, tier: p.tr, units: p.u || 0, allowed: p.a || 0,
@@ -577,7 +587,7 @@
     const top = (s.top || []).map(t => `<li>
         <div class="o">${esc(t.owner)}</div>
         <div>${esc(t.type)}, ${t.acres} acres: ${homes(t.units)}</div>
-        <div>${esc(t.status)} ${confTag(t.conf)}</div>
+        <div>${esc(t.status)} ${confTag(t.conf)}${pdNum(t.zoning) ? ` <a href="${pdUrl(pdNum(t.zoning))}" target="_blank" rel="noopener">PD ${pdNum(t.zoning)} ordinance</a>` : ''}</div>
       </li>`).join('');
 
     const wardLinks = arr(s.wards).map(w => {

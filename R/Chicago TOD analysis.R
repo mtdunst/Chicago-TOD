@@ -1622,12 +1622,13 @@ small_lot_ac  <- 0.12   # under ~5,200 sq ft (1-2 standard lots): fourplex
 large_lot_ac  <- 0.50   # at/above this: full station target; in between: courtyard
 mm_min_units  <- 4      # every single-family lot near a station -> at least a fourplex
 
-# As-of-right units in residential districts are limited by building type and
-# minimum lot area per unit, not just FAR (approximate; verify against the
-# Chicago Zoning Ordinance before publishing exact figures)
-#   RS-1/RS-2: single-family only; RS-3: two-flat; RT/RM: sq ft of lot per unit
-mla_sqft <- c("RT-3.5" = 1250, "RT-4" = 1000, "RM-4.5" = 400, "RM-5" = 400,
-              "RM-5.5" = 200, "RM-6" = 135, "RM-6.5" = 100)
+# Minimum lot area per dwelling unit, from the Chicago Zoning Ordinance
+# (R districts: 17-2-0303; B and C districts: 17-3-0402). Units allowed =
+# lot area / this value, also capped by FAR. Transit bonuses are not modeled.
+mla_sqft <- c("RS-1" = 6250, "RS-2" = 5000, "RS-3" = 2500,
+              "RT-3.5" = 1250, "RT-4" = 1000,
+              "RM-4.5" = 700, "RM-5" = 400, "RM-5.5" = 400, "RM-6" = 300, "RM-6.5" = 115)
+bc_mla   <- c("1" = 2500, "1.5" = 1350, "2" = 1000, "3" = 400, "5" = 200)   # by dash number
 
 # Active public campuses: shown, but excludable from the public scenario
 campus_pattern <- "UNIV|COLLEGE|CHICAGO STATE|INST OF TECH|CITY ?JR"
@@ -1639,12 +1640,12 @@ sf_classes <- c("202", "203", "204", "205", "206", "207", "208", "209", "210",
 allowed_units_zoning <- function(zone_class, lot_sqft, base_far) {
   zc        <- str_to_upper(str_squish(coalesce(zone_class, "")))
   far_units <- floor(coalesce(base_far, 0) * lot_sqft / sqft_per_unit)
-  mla       <- unname(mla_sqft[zc])
+  dash      <- str_match(zc, "^[BC][0-9]-([0-9.]+)$")[, 2]
+  mla       <- coalesce(unname(mla_sqft[zc]), unname(bc_mla[dash]))
   case_when(
-    zc %in% c("RS-1", "RS-2") ~ 1,
-    zc == "RS-3"              ~ 2,
-    !is.na(mla)               ~ pmin(far_units, floor(lot_sqft / mla)),
-    TRUE                      ~ far_units
+    str_starts(zc, "R") & !is.na(mla) ~ pmax(1, pmin(far_units, floor(lot_sqft / mla))),  # an existing home is always allowed
+    !is.na(mla)                       ~ pmin(far_units, floor(lot_sqft / mla)),
+    TRUE                              ~ far_units
   )
 }
 
@@ -1681,7 +1682,7 @@ retarget <- function(x) {
       # What current zoning allows without a rezoning (PD/industrial = 0 here)
       aor_far   = if_else(housing_ok, pmin(coalesce(base_far, 0), target_far), 0),
       units_aor = pmax(0, aor_far - existing_far) * acres_ws * 43560 / sqft_per_unit,
-      units_aor = if_else(zone_cat %in% c("Single-family", "Multifamily / townhouse"),
+      units_aor = if_else(zone_cat %in% c("Single-family", "Multifamily / townhouse", "Business / commercial"),
                           pmin(units_aor, allowed_units_zoning(zone_class, sqft, base_far) * share_in_ws),
                           units_aor),
       
@@ -1863,6 +1864,7 @@ saveRDS(scenarios,       "out/scenarios.rds")
 write_csv(tiers,   "out/lot_tiers.csv")
 write_csv(scen,    "out/scenario_summary.csv")
 write_csv(st_scen, "out/station_scenarios.csv")
+
 
 
 

@@ -13,8 +13,6 @@
 #         a downloaded ward boundary file, a Census API key (tidycensus)
 # Needs the tod_05 / tod_08 settings in session for the methods text.
 # =============================================================================
-setwd("C:\\Users\\mdunst\\OneDrive - Cambridge Systematics\\Documents\\GitHub\\Chicago-TOD")
-
 
 library(tidyverse)
 library(sf)
@@ -23,12 +21,16 @@ library(tidycensus)
 library(htmltools)
 library(DT)
 library(scales)
+
 # ---- Settings ---------------------------------------------------------------
 
-site_src    <- "site
-"     # folder holding index.html, app.js, styles.css
+setwd("C:\\Users\\mdunst\\OneDrive - Cambridge Systematics\\Documents\\GitHub\\Chicago-TOD")
+
+site_src    <- "site"     # folder holding index.html, app.js, styles.css
 docs        <- "docs"
 wards_path  <- "https://data.cityofchicago.org/api/v3/views/p293-wvbd/query.geojson"   # City data portal download
+schools_path <- "https://data.cityofchicago.org/api/v3/views/mntu-576c/query.csv"
+school_buffer_ft <- 300   # CPS-owned parcels this close to a school count as its grounds
 author_name <- "Michael Dunst"
 repo_url    <- "https://github.com/mtdunst/Chicago-TOD"
 site_url    <- "https://mtdunst.github.io/Chicago-TOD/"
@@ -36,7 +38,22 @@ n_map_sites <- 2500       # largest sites drawn as parcels
 acs_year    <- 2023
 if (!exists("crs_il"))  crs_il  <- 3435
 if (!exists("walk_ft")) walk_ft <- 2640
-# census_api_key("YOUR KEY", install = TRUE)   # once, if you haven't already
+# census_api_key("YOUR KEY", install = TRUE)   # once, if you haven't alread
+
+manual_exclude <- tribble(
+  ~pin,                  ~reason,
+  "17-22-110-001-0000",  "Field Museum",
+  "17-10-320-002-0000",  "Millennium Park",
+  "17-10-500-033-0000",  "Millennium Park",
+  "17-10-500-013-0000",  "Millennium Park",
+  "17-10-500-014-0000",  "Millennium Park",
+  "17-10-317-003-8013",  "Millennium Park",
+  "17-10-317-003-8001",  "Millennium Park",
+  "17-10-317-003-8014",  "Millennium Park",
+  "17-10-500-032-6001",  "Millennium Park",
+  "17-10-500-032-6002",  "Millennium Park",
+  "17-10-500-026-0000",  "Millennium Park"
+)
 
 for (d in c(docs, file.path(docs, "data"), file.path(docs, "wards"))) {
   dir.create(d, recursive = TRUE, showWarnings = FALSE)
@@ -50,8 +67,7 @@ scen_def <- tribble(
   "near",      "in_near_term",        "net_units", "Build on open land first",                "Vacant lots and surface parking, on private land and on land the City, County, Land Bank, or a transit agency could offer directly. No demolition.",
   "aor",       "in_max",              "aor",       "What today's zoning allows",              "Only the homes current zoning already permits, on the same sites as a full build-out.",
   "mm",        "in_mm",               "net_units", "If fourplexes were legal near stations",  "Every single-family lot within a half mile of a station becomes a fourplex.",
-  "public",    "in_public",           "net_units", "If public land were offered",             "Every publicly owned site, including schools, Chicago Housing Authority land, and state land.",
-  "public_nc", "in_public_no_campus", "net_units", "Public land, without active campuses",    "The same public land, leaving out university and college campuses.",
+  "public",    "in_public",           "net_units", "If public land were offered",             "Every publicly owned site, including Chicago Housing Authority and state land. Active schools and campuses are not counted.",
   "transit",   "in_transit",          "net_units", "If transit agencies built on their land", "Land owned by CTA, Metra, Pace, and the regional transit authority.",
   "max",       "in_max",              "net_units", "Full build-out",                          "Every underused site at its target density, plus fourplexes on single-family lots."
 )
@@ -96,6 +112,17 @@ write_js <- function(obj, name, file) {
                     toJSON(obj, auto_unbox = TRUE, digits = NA, na = "null", null = "null"), ";"),
              file, useBytes = TRUE)
 }
+# Drop stray points left by unions or simplification (Leaflet draws them as pins)
+keep_type <- function(x, type = c("POLYGON", "LINESTRING")) {
+  type <- match.arg(type)
+  if (any(st_geometry_type(x) %in% c("GEOMETRYCOLLECTION", "GEOMETRY", "POINT", "MULTIPOINT"))) {
+    x <- suppressWarnings(st_collection_extract(x, type))
+  }
+  x %>%
+    filter(!st_is_empty(.)) %>%
+    st_cast(paste0("MULTI", type), warn = FALSE)
+}
+
 geo_js <- function(x, name, file, precision = 5) {
   tmp <- tempfile(fileext = ".geojson")
   st_write(st_transform(x, 4326), tmp, driver = "GeoJSON", quiet = TRUE, delete_dsn = TRUE,
@@ -160,6 +187,74 @@ attrs <- sites %>%
 # Ward for every site (interior point join)
 w_hit <- st_intersects(st_point_on_surface(st_geometry(sites)), wards)
 attrs$ward <- wards$ward[map_int(w_hit, ~ if (length(.x)) .x[1] else NA_integer_)]
+
+# ---- Active schools and campuses: shown greyed out, left out of every total ----
+
+load_schools <- function(path) {
+  if (str_detect(path, regex("\\.(geojson|json|shp|gpkg)$", ignore_case = TRUE))) {
+    s <- st_read(path, quiet = TRUE)
+  } else {
+    raw <- read_csv(path, show_col_types = FALSE)
+    lat <- str_subset(names(raw), regex("^(lat|latitude|y)$", ignore_case = TRUE))[1]
+    lon <- str_subset(names(raw), regex("^(lon|long|longitude|x)$", ignore_case = TRUE))[1]
+    if (is.na(lat) || is.na(lon)) {
+      loc <- str_subset(names(raw), regex("location|the_geom", ignore_case = TRUE))[1]
+      xy  <- str_match(raw[[loc]], "POINT \\((-?[0-9.]+) (-?[0-9.]+)\\)")
+      raw <- raw %>% mutate(.lon = as.numeric(xy[, 2]), .lat = as.numeric(xy[, 3]))
+      lat <- ".lat"; lon <- ".lon"
+    }
+    s <- raw %>% filter(!is.na(.data[[lat]]), !is.na(.data[[lon]])) %>%
+      st_as_sf(coords = c(lon, lat), crs = 4326)
+  }
+  name_col <- str_subset(names(s), regex("school_nm|short_name|school_name|long_name|^name$",
+                                         ignore_case = TRUE))[1]
+  message("Schools loaded: ", nrow(s), " (name column: ", name_col, ")")
+  s %>%
+    st_transform(crs_il) %>%
+    transmute(school = if (!is.na(name_col)) str_to_title(.data[[name_col]]) else "Chicago public school")
+}
+
+schools <- load_schools(schools_path)
+
+# Parcels that contain a school, plus CPS-owned parcels right next to one
+# (playgrounds, annexes, parking). Closed or vacant CPS land stays countable.
+in_hit      <- st_intersects(sites, schools)
+school_here <- map_chr(in_hit, ~ if (length(.x)) schools$school[.x[1]] else NA_character_)
+school_near <- rep(NA_character_, nrow(sites))
+cps_rows    <- which(attrs$owner_group %in% "CPS / PBC")
+if (length(cps_rows)) {
+  nn <- st_is_within_distance(sites[cps_rows, ], schools, dist = school_buffer_ft)
+  school_near[cps_rows] <- map_chr(nn, ~ if (length(.x)) schools$school[.x[1]] else NA_character_)
+}
+
+attrs <- attrs %>%
+  mutate(
+    school      = coalesce(school_here, school_near),
+    institution = case_when(
+      !is.na(school)        ~ paste("Active school:", school),
+      active_campus %in% TRUE ~ "Active university or college campus",
+      TRUE                  ~ NA_character_
+    )
+  )
+
+inst_attrs <- attrs %>% filter(!is.na(institution))
+attrs      <- attrs %>% filter(is.na(institution))
+inst_ids   <- inst_attrs$site_id
+
+# ---- Manual exclusions (matched on the 10-digit PIN inside each site) ----
+excl_pin10 <- unique(str_sub(str_remove_all(manual_exclude$pin, "\\D"), 1, 10))
+excl_hit   <- function(pin10s) map_lgl(str_split(coalesce(pin10s, ""), ";"), ~ any(.x %in% excl_pin10))
+excl_attrs <- bind_rows(attrs[excl_hit(attrs$pin10s), ], inst_attrs[excl_hit(inst_attrs$pin10s), ])
+attrs      <- attrs[!excl_hit(attrs$pin10s), ]
+inst_attrs <- inst_attrs[!excl_hit(inst_attrs$pin10s), ]
+excl_ids   <- excl_attrs$site_id
+found      <- excl_pin10 %in% unlist(str_split(excl_attrs$pin10s, ";"))
+message(nrow(excl_attrs), " site(s) excluded by hand (", round(sum(excl_attrs$net_units, na.rm = TRUE)),
+        " units removed)")
+if (any(!found)) message("Exclusion PINs not among counted sites (already out, or check the PIN): ",
+                         paste(excl_pin10[!found], collapse = ", "))
+message(nrow(inst_attrs), " school and campus sites set aside (",
+        round(sum(inst_attrs$net_units)), " units no longer counted)")
 
 scenario_units <- function(df, group = character()) {
   pmap_dfr(scen_def %>% select(key, flag, unit_col), function(key, flag, unit_col) {
@@ -249,7 +344,7 @@ stations_out <- map(station_ids, function(sid) {
     id = sid, name = b$station_name, modes = b$modes,
     typology = typ_lookup$typology[typ_lookup$station_id == sid][1],
     lat = round(b$lat, 5), lng = round(b$lng, 5),
-    wards = { wl <- st_wards$wards[st_wards$station_id == sid]; if (length(wl)) wl[[1]] else list() },
+    wards = I({ wl <- st_wards$wards[st_wards$station_id == sid]; if (length(wl)) wl[[1]] else integer() }),
     homes_today  = if (nrow(cx)) round(cx$homes_today) else NULL,
     income       = if (nrow(cx) && !is.nan(cx$income)) round(cx$income, -2) else NULL,
     renter_share = if (nrow(cx) && !is.nan(cx$renter_share)) round(cx$renter_share, 2) else NULL,
@@ -269,7 +364,7 @@ wards_out <- map(ward_ids, function(w) {
        units  = as_named(s, "key", "units"),
        conf   = setNames(as.list(s$conf), s$key),
        levers = as_named(l, "lever", "units"),
-       stations = sort(unique(st_in_ward$station_name[st_in_ward$ward == w])),
+       stations = I(sort(unique(st_in_ward$station_name[st_in_ward$ward == w]))),
        print_url = sprintf("wards/ward-%02d.html", w))
 })
 
@@ -302,23 +397,23 @@ featured <- list(
        body = sprintf("Four Orange Line stations, from Western to Halsted, have more underused land than almost anywhere in the city: room for about %s homes. About %s of that sits on land zoned for industry, much of it working businesses. Here, building housing near transit is also a decision about jobs.",
                       approx_r(sum(orange$net_units)),
                       percent(sum(orange$gain[orange$lever == "industrial"]) / sum(orange$net_units), 1)),
-       station_ids = orange_ids, site_ids = character()),
+       station_ids = I(orange_ids), site_ids = I(character())),
   list(key = "sox", title = "Parking lots next to a Red Line station",
        body = sprintf("The Illinois Sports Facilities Authority owns about %s acres around the ballpark at 35th Street, much of it surface parking a short walk from the Sox-35th station. At the station's target density, that land could hold about %s homes.",
                       round(site_sum(sox_ids)$acres), approx_r(site_sum(sox_ids)$units)),
-       station_ids = character(), site_ids = sox_ids),
+       station_ids = I(character()), site_ids = I(sox_ids)),
   list(key = "norwood", title = "A Metra stop surrounded by single-family homes",
        body = sprintf("The area around the Norwood Park Metra station is almost all single-family homes. Allowing fourplexes on those lots would add about %s homes over time, one lot at a time. Today's zoning allows about %s of them.",
                       approx_r(sum(np$net_units)), approx_r(sum(np$aor))),
-       station_ids = np_id, site_ids = character()),
+       station_ids = I(np_id), site_ids = I(character())),
   list(key = "cta79", title = "Transit land at 79th Street",
        body = sprintf("CTA owns about %s acres near the 79th Street Red Line station, likely including working bus and rail facilities. Building above or beside active transit facilities is harder and costlier, but it has precedent in other cities. Here it could add about %s homes.",
                       round(site_sum(cta79_ids)$acres), approx_r(site_sum(cta79_ids)$units)),
-       station_ids = character(), site_ids = cta79_ids),
+       station_ids = I(character()), site_ids = I(cta79_ids)),
   list(key = "roosevelt", title = "Approved, but not yet built",
-       body = sprintf("Two large lots near Roosevelt station already have planned-development zoning and appeared empty in the City's most recent building footprints. Sites like these don't need a rezoning; they need projects to move forward. Together they could hold about %s homes.",
+       body = sprintf("The nearby 78 megadevelopment has multiuse building proposed, but the current phase only includes the Chicago Fire stadium and private vehicle parking. Sites like these don't need a rezoning; they need projects to move forward. Together they could hold about %s homes.",
                       approx_r(site_sum(roos_ids)$units)),
-       station_ids = character(), site_ids = roos_ids)
+       station_ids = I(character()), site_ids = I(roos_ids))
 )
 featured_site_ids <- unique(unlist(map(featured, "site_ids")))
 
@@ -327,16 +422,20 @@ featured_site_ids <- unique(unlist(map(featured, "site_ids")))
 # =============================================================================
 
 map_sites <- sites %>%
-  left_join(attrs %>% select(site_id, aor, conf, ward), by = "site_id") %>%
-  filter(!in_mm) %>%
-  { bind_rows(slice_max(., net_units, n = n_map_sites, with_ties = FALSE),
-              filter(., site_id %in% featured_site_ids)) } %>%
+  left_join(bind_rows(attrs, inst_attrs) %>% select(site_id, aor, conf, ward, institution),
+            by = "site_id") %>%
+  filter(!in_mm, !site_id %in% excl_ids) %>%
+  { bind_rows(slice_max(filter(., is.na(institution)), net_units, n = n_map_sites, with_ties = FALSE),
+              filter(., site_id %in% featured_site_ids),
+              filter(., !is.na(institution), acres_ws >= 0.25)) } %>%
   distinct(site_id, .keep_all = TRUE) %>%
   st_simplify(preserveTopology = TRUE, dTolerance = 10) %>%
   transmute(id = site_id,
             owner   = str_to_title(coalesce(owner_main, "Owner not listed")),
             type    = site_type, station = station_name,
-            units   = round(net_units), allowed = round(aor),
+            units   = if_else(is.na(institution), round(net_units), 0),
+            allowed = if_else(is.na(institution), round(aor), 0),
+            inst    = institution,
             zoning  = coalesce(zone_class, ""), status = plain_status(zoning_status),
             conf, campus = active_campus %in% TRUE, tier = lot_tier,
             acres   = round(acres_ws, 1))
@@ -353,11 +452,62 @@ inc_labels <- sprintf("$%sk to $%sk", round(head(inc_breaks, -1) / 1000), round(
 wards_geo <- wards %>% st_simplify(preserveTopology = TRUE, dTolerance = 30)
 
 # =============================================================================
+# 6b. PARCELS AROUND EACH STATION (one small file per station, loaded on demand)
+# =============================================================================
+
+# Every parcel assigned to a station (its nearest), with a role code:
+#   p private site, g other public, t transit-owned, f single-family lot (fourplex),
+#   i active school or campus (not counted), o other parcel (not counted)
+pot_all <- readRDS("out/pot.rds") %>% select(site_id, station_id, zone_class)
+
+cand_props <- bind_rows(
+  attrs %>% transmute(
+    site_id,
+    r  = case_when(in_mm ~ "f", site_type == "Transit-owned" ~ "t",
+                   site_type == "Private" ~ "p", TRUE ~ "g"),
+    o  = str_to_title(coalesce(owner_main, "")),
+    u  = round(net_units, 1), a = round(aor, 1),
+    s  = plain_status(zoning_status), c = conf, tr = lot_tier, ac = round(acres_ws, 2)),
+  inst_attrs %>% transmute(site_id, r = "i", inst = institution)
+)
+
+st_parcels <- pot_all %>%
+  left_join(cand_props, by = "site_id") %>%
+  mutate(r = coalesce(r, "o"), z = coalesce(zone_class, "")) %>%
+  select(-zone_class) %>%
+  rename(id = site_id) %>%
+  st_simplify(preserveTopology = TRUE, dTolerance = 3) %>%   # feet
+  keep_type("POLYGON")
+
+st_dir <- file.path(docs, "data", "st")
+dir.create(st_dir, recursive = TRUE, showWarnings = FALSE)
+unlink(list.files(st_dir, full.names = TRUE))                  # clear old files
+
+walk(split(st_parcels, st_parcels$station_id), function(x) {
+  sid_i <- x$station_id[1]
+  tmp <- tempfile(fileext = ".geojson")
+  st_write(st_transform(select(x, -station_id), 4326), tmp, driver = "GeoJSON",
+           quiet = TRUE, delete_dsn = TRUE,
+           layer_options = c("COORDINATE_PRECISION=5", "RFC7946=YES"))
+  writeLines(paste0("window.TOD_ST = window.TOD_ST || {}; window.TOD_ST[\"", sid_i, "\"] = ",
+                    paste(readLines(tmp, warn = FALSE), collapse = ""), ";"),
+             file.path(st_dir, paste0(sid_i, ".js")), useBytes = TRUE)
+})
+st_sizes <- file.size(list.files(st_dir, full.names = TRUE))
+message(sprintf("Station parcel files: %d files, %.1f MB total, largest %.1f MB",
+                length(st_sizes), sum(st_sizes) / 1e6, max(st_sizes) / 1e6))
+
+# =============================================================================
 # 7. SUMMARY + WRITE DATA FILES
 # =============================================================================
 
 summary_out <- list(
   generated   = format(Sys.Date(), "%B %Y"),
+  set_aside   = list(
+    schools  = sum(str_starts(inst_attrs$institution, "Active school")),
+    campuses = sum(!str_starts(inst_attrs$institution, "Active school")),
+    acres    = round(sum(inst_attrs$acres_ws))
+  ),
   author      = author_name, repo_url = repo_url, site_url = site_url,
   homes_today = round(sum(st_context$homes_today)),
   scenarios   = map(seq_len(nrow(scen_def)), function(i) {
@@ -380,10 +530,10 @@ summary_out <- list(
 
 write_js(list(summary = summary_out, stations = stations_out, wards = wards_out,
               featured = featured), "TOD", file.path(docs, "data", "core.js"))
-geo_js(rail,       "TOD_RAIL",   file.path(docs, "data", "rail.js"))
-geo_js(map_sites,  "TOD_SITES",  file.path(docs, "data", "sites.js"))
-geo_js(tracts_out, "TOD_TRACTS", file.path(docs, "data", "tracts.js"), precision = 4)
-geo_js(wards_geo,  "TOD_WARDS",  file.path(docs, "data", "wards.js"), precision = 5)
+geo_js(keep_type(rail, "LINESTRING"),    "TOD_RAIL",   file.path(docs, "data", "rail.js"))
+geo_js(keep_type(map_sites, "POLYGON"),  "TOD_SITES",  file.path(docs, "data", "sites.js"))
+geo_js(keep_type(tracts_out, "POLYGON"), "TOD_TRACTS", file.path(docs, "data", "tracts.js"), precision = 4)
+geo_js(keep_type(wards_geo, "POLYGON"),  "TOD_WARDS",  file.path(docs, "data", "wards.js"), precision = 5)
 
 # Downloads
 write_csv(city_scen %>% left_join(scen_def %>% select(key, label), by = "key"),
@@ -398,7 +548,7 @@ write_csv(attrs %>% select(-any_of("pin10s")), file.path(docs, "data", "all_site
 
 type_cols <- c("Private" = "#8A97A3", "Other public" = "#3C7A5A", "Transit-owned" = "#1C5D99")
 rail_il   <- st_transform(rail, crs_il)
-sites_w   <- sites %>% left_join(attrs %>% select(site_id, ward), by = "site_id") %>% filter(!in_mm)
+sites_w   <- sites %>% inner_join(attrs %>% select(site_id, ward), by = "site_id") %>% filter(!in_mm)
 near_pts  <- stations %>% left_join(st_scen %>% filter(key == "near") %>% select(station_id, units),
                                     by = "station_id")
 
@@ -502,6 +652,7 @@ st_tbl <- st_scen %>%
   pivot_wider(names_from = label, values_from = units, values_fill = 0) %>%
   select(-station_id)
 site_tbl <- st_drop_geometry(map_sites) %>%
+  filter(is.na(inst)) %>%
   transmute(Owner = owner, `Site type` = type, Station = station, `New homes` = units,
             `Allowed today` = allowed, Zoning = zoning, `Zoning status` = status,
             `Building data` = conf, Acres = acres)
@@ -533,11 +684,13 @@ save_html(data_page, file.path(docs, "data.html"), libdir = "lib")
 # Copy the hand-written page and fill in the sharing metadata
 idx <- readLines(file.path(site_src, "index.html"), warn = FALSE)
 idx <- idx %>%
+  str_replace_all(fixed("{{VERSION}}"), format(Sys.time(), "%Y%m%d%H%M")) %>%   # cache-buster
   str_replace_all(fixed("{{SITE_URL}}"), site_url) %>%
   str_replace_all(fixed("{{DESCRIPTION}}"), sprintf(
     "About %s new homes could fit on open land near Chicago's L and Metra stations. See what could be built near your station and which decisions would unlock it.",
     approx_r(u("near"))))
 writeLines(idx, file.path(docs, "index.html"), useBytes = TRUE)
-file.copy(file.path(site_src, c("app.js", "styles.css")), docs, overwrite = TRUE)
+assets <- c("app.js", "styles.css", "favicon.png")
+file.copy(file.path(site_src, assets[file.exists(file.path(site_src, assets))]), docs, overwrite = TRUE)
 
 message("Site written to ", docs, "/. Preview with: servr::httd('", docs, "') or open index.html directly.")
