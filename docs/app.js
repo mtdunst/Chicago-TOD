@@ -115,18 +115,40 @@
   // ---------------------------------------------------------------------------
   // Scenario buttons
   // ---------------------------------------------------------------------------
+  // Read left to right: today's rules, a first step, one policy at a time, everything
+  const GROUPS = [
+    { label: 'Today',                keys: ['aor'] },
+    { label: 'Start here',           keys: ['near'] },
+    { label: 'One policy at a time', keys: ['mm', 'public', 'public_nc', 'transit'] },
+    { label: 'Everything',           keys: ['max'] }
+  ];
+  const grouped = new Set(GROUPS.flatMap(g => g.keys));
+  const extra = SC.filter(s => !grouped.has(s.key)).map(s => s.key);
+  if (extra.length) GROUPS.push({ label: 'Other', keys: extra });
+  GROUPS.forEach(g => { g.items = g.keys.filter(k => SC_BY[k]).map(k => SC_BY[k]); });
+  const SC_ORD = GROUPS.flatMap(g => g.items);
+
   const btnWrap = $('scenario-buttons');
-  SC.forEach(s => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.textContent = s.label; b.dataset.key = s.key;
-    b.addEventListener('click', () => setScenario(s.key));
-    btnWrap.appendChild(b);
+  GROUPS.filter(g => g.items.length).forEach(g => {
+    const grp = document.createElement('div');
+    grp.className = 'scen-group';
+    grp.setAttribute('role', 'group');
+    grp.setAttribute('aria-label', g.label);
+    grp.innerHTML = `<span class="scen-group-label">${esc(g.label)}</span><div class="scen-group-btns"></div>`;
+    g.items.forEach(s => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = s.label; b.dataset.key = s.key;
+      b.addEventListener('click', () => setScenario(s.key));
+      grp.lastElementChild.appendChild(b);
+    });
+    btnWrap.appendChild(grp);
   });
   const scenSel = document.createElement('select');
   scenSel.id = 'scenario-select';
   scenSel.className = 'scen-select';
   scenSel.setAttribute('aria-label', 'Scenario');
-  scenSel.innerHTML = SC.map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('');
+  scenSel.innerHTML = GROUPS.filter(g => g.items.length).map(g =>
+    `<optgroup label="${esc(g.label)}">${g.items.map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('')}</optgroup>`).join('');
   scenSel.addEventListener('change', () => setScenario(scenSel.value));
   btnWrap.after(scenSel);
   function setScenario(k) {
@@ -162,7 +184,7 @@
   map.getContainer().addEventListener('mouseleave', () => map.scrollWheelZoom.disable());
 
   // Parcels sit above wards and income so those filled layers can't block parcel clicks
-  [['income', 340], ['wardsP', 350], ['sites', 365], ['rail', 380]].forEach(([n, z]) => {
+  [['income', 340], ['wardsP', 350], ['stParcels', 360], ['sites', 365], ['rail', 380]].forEach(([n, z]) => {
     map.createPane(n); map.getPane(n).style.zIndex = z;
   });
 
@@ -355,7 +377,10 @@
                 ['near', 'aor', 'max'].map(k => `${esc(SC_BY[k].label)}: ${homes(u[k] || 0)}`).join('<br>') +
                 `<br><a href="${W.print_url}">Printable ward summary</a>`;
             });
-            l.on('click', () => setWard(w));
+            l.on('click', () => {
+              setWard(w);
+              map.fitBounds(l.getBounds(), { padding: [20, 20], animate: !reduceMotion });
+            });
           }
         });
       }
@@ -370,6 +395,79 @@
   function showLoadError(err) {
     $('scenario-desc').textContent = `${err.message}. Check that the data folder was published alongside this page.`;
   }
+
+  // ---- Parcels around the selected station (one file per station, loaded on demand) ----
+  const ROLE = {
+    p: { label: 'Private site',                     fill: TYPE_COLOR['Private'],       type: 'Private' },
+    g: { label: 'Other public site',                fill: TYPE_COLOR['Other public'],  type: 'Other public' },
+    t: { label: 'Transit-owned site',               fill: TYPE_COLOR['Transit-owned'], type: 'Transit-owned' },
+    f: { label: 'Single-family lot (fourplex)',     fill: '#F2A3AE' },
+    i: { label: 'Active school or campus (not counted)', fill: INST_FILL },
+    o: { label: 'Other parcel (not counted)',       fill: null }
+  };
+  function stStyle(p, hover) {
+    const r = ROLE[p.r] || ROLE.o;
+    if (p.r === 'o') return { color: '#9AA6AF', weight: hover ? 1.4 : 0.5, fill: true, fillColor: '#fff',
+                              fillOpacity: hover ? 0.5 : 0.05, dashArray: null };
+    if (p.r === 'i') return { color: '#8A97A3', weight: hover ? 1.5 : 0.8, dashArray: '3 3',
+                              fillColor: r.fill, fillOpacity: hover ? 0.75 : 0.55 };
+    return { color: '#1F2A33', weight: hover ? 1.8 : 0.4, dashArray: null,
+             fillColor: r.fill, fillOpacity: hover ? 0.85 : (p.r === 'f' ? 0.6 : 0.7) };
+  }
+  function stPopup(p) {
+    const st = ST_BY[state.station];
+    if (p.r === 'o') return `<strong>Not counted as a redevelopment site</strong><br>` +
+      `<span class="pop-note">Already built up for its location, or excluded: parks, condominiums, rail and street right-of-way, cemeteries, and similar.</span>` +
+      (p.z ? `<br>Zoning: ${esc(p.z)}` : '');
+    if (p.r === 'i') return sitePopup({ inst: p.inst });
+    if (p.r === 'f') {
+      const u = Math.round(p.u || 0), a = Math.round(p.a || 0);
+      return `<strong>Single-family lot</strong><br>As a fourplex: ${u} new ${u === 1 ? 'home' : 'homes'}<br>` +
+        `Today's zoning allows ${a < 1 ? 'no' : a} more${p.z ? '<br>Zoning: ' + esc(p.z) : ''}`;
+    }
+    return sitePopup({ owner: p.o || 'Owner not listed', type: ROLE[p.r].type, station: st ? st.name : '',
+                       acres: p.ac, tier: p.tr, units: p.u || 0, allowed: p.a || 0,
+                       status: p.s, zoning: p.z, conf: p.c, campus: false });
+  }
+
+  let stLayer = null, stCircle = null, stLegend = null, stReq = 0;
+  function clearStationParcels() {
+    stReq++;
+    [stLayer, stCircle].forEach(l => { if (l) map.removeLayer(l); });
+    if (stLegend) stLegend.remove();
+    stLayer = stCircle = stLegend = null;
+  }
+  async function showStationParcels(id) {
+    clearStationParcels();
+    const s = ST_BY[id];
+    if (!s || !$('lyr-station').checked) return;
+    const req = stReq;
+    stCircle = L.circle([s.lat, s.lng], { radius: 804.7, pane: 'stParcels', color: '#1F2A33', weight: 1.2,
+                                          dashArray: '5 5', fill: false, interactive: false }).addTo(map);
+    try { await need(`data/st/${encodeURIComponent(id)}.js`); }
+    catch (_) { return; }                      // no parcel file for this station
+    if (req !== stReq || !window.TOD_ST || !window.TOD_ST[id]) return;
+    stLayer = L.geoJSON(window.TOD_ST[id], {
+      pane: 'stParcels', pointToLayer: noPoint,
+      style: f => stStyle(f.properties, false),
+      onEachFeature: (f, l) => {
+        l.bindPopup(() => stPopup(f.properties), { maxWidth: narrow() ? 240 : 300 });
+        l.on('mouseover', () => l.setStyle(stStyle(f.properties, true)));
+        l.on('mouseout', () => l.setStyle(stStyle(f.properties, false)));
+      }
+    }).addTo(map);
+    stLegend = L.control({ position: 'bottomleft' });
+    stLegend.onAdd = () => {
+      const d = collapsible(L.DomUtil.create('div', 'map-legend'));
+      d.innerHTML = lgTitle('Parcels near ' + esc(s.name), d) + Object.values(ROLE).map(r =>
+        `<div class="row"><span class="chip" style="background:${r.fill || '#fff'};${r.fill ? '' : 'outline:1px solid #9AA6AF'}${r === ROLE.i ? ';outline:1px dashed #8A97A3' : ''}"></span>${esc(r.label)}</div>`).join('');
+      return d;
+    };
+    stLegend.addTo(map);
+  }
+  $('lyr-station').addEventListener('change', e => {
+    if (e.target.checked && state.station) showStationParcels(state.station); else clearStationParcels();
+  });
 
   // ---------------------------------------------------------------------------
   // Station picker and profile
@@ -395,10 +493,11 @@
     writeHash();
     highlight();
     renderProfile(id);
+    showStationParcels(id);
     if (narrow()) $('profile').scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
     const s = ST_BY[id];
     if (move && s) {
-      map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: !reduceMotion });
+      map.fitBounds(L.latLng(s.lat, s.lng).toBounds(1800), { animate: !reduceMotion });   // the half-mile walkshed
     }
   }
 
@@ -461,7 +560,7 @@
     if (s.income) ctx.push(`Median household income is about $${approx(s.income)}.`);
     if (s.renter_share != null) ctx.push(`${pct(s.renter_share)} of households rent.`);
 
-    const bars = SC.map(c => {
+    const bars = SC_ORD.map(c => {
       const u = s.units[c.key] || 0;
       return `<div class="sbar${c.key === k ? ' active' : ''}">
         <span>${esc(c.label)}</span>
@@ -490,6 +589,7 @@
       <h3>${flair(s)} ${esc(s.name)}</h3>
       <p class="p-meta">${esc(TYPOLOGY[s.typology] || s.typology)}, ${esc(s.modes)}${arr(s.wards).length ? ', Ward ' + arr(s.wards).join(', ') : ''}</p>
       <p class="p-context">${ctx.join(' ')}</p>
+      <p class="note p-assign">Each parcel is counted with its closest station. Where half-mile circles overlap, parcels nearer a neighboring station are counted there instead, so parts of this circle may look empty on the map.</p>
       <p class="p-sec">New homes that could fit here</p>
       <div class="sbars">${bars}</div>
       <p class="p-sec">What it takes</p>
@@ -503,7 +603,7 @@
       </div>`;
 
     $('show-top').addEventListener('click', () => {
-      state.station = null; writeHash(); highlight(); renderTopList();
+      state.station = null; writeHash(); highlight(); clearStationParcels(); renderTopList();
     });
     $('copy-link').addEventListener('click', async e => {
       try { await navigator.clipboard.writeText(location.href); e.target.textContent = 'Link copied'; }
@@ -720,6 +820,19 @@
       });
     }, { rootMargin: '-35% 0px -60% 0px' });
     items.forEach(i => { const el = $(i.id); if (el) obs.observe(el); });
+
+    const flagEl = document.querySelector('.flag');
+    if (flagEl) {
+      let ticking = false;
+      const place = () => {
+        ticking = false;
+        nav.style.setProperty('--nav-top', Math.max(28, flagEl.getBoundingClientRect().bottom + 28) + 'px');
+      };
+      const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(place); } };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+      place();
+    }
   })();
 
   setScenario(state.scenario);
@@ -728,8 +841,9 @@
   if (state.station) {
     renderProfile(state.station);
     const s = ST_BY[state.station];
-    map.setView([s.lat, s.lng], 14);
+    map.fitBounds(L.latLng(s.lat, s.lng).toBounds(1800));
     highlight();
+    showStationParcels(state.station);
   }
   need('data/sites.js').then(initPlaceMaps).catch(showLoadError);
 })();

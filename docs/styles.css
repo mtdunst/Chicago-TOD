@@ -58,7 +58,11 @@ summary:focus-visible, .term:focus-visible, #map:focus-visible {
   font: inherit; padding: 8px 12px; min-width: min(420px, 100%);
   border: 1px solid #9AA6AF; border-radius: 4px; background: #fff; color: var(--ink);
 }
-.scen { display: flex; flex-wrap: wrap; gap: 6px; }
+/* One row per group: label on the left, its buttons on the right, read top to bottom */
+.scen { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 16px; align-items: center; }
+.scen-group { display: contents; }
+.scen-group-label { font: 600 .85rem/1.2 'Barlow', sans-serif; color: var(--muted); }
+.scen-group-btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .scen button {
   font: 500 .95rem/1.2 'Barlow', sans-serif; color: var(--ink);
   padding: 8px 12px; border: 1px solid #9AA6AF; border-radius: 4px; background: #fff; cursor: pointer;
@@ -194,7 +198,7 @@ footer { margin-top: 80px; }
 
 /* ---- Section navigation ---------------------------------------------------- */
 header, section, footer { scroll-margin-top: 24px; }
-.site-nav { position: fixed; top: 28px; left: 24px; z-index: 1100; }
+.site-nav { position: fixed; top: var(--nav-top, 28px); left: 24px; z-index: 1100; }
 .nav-toggle { display: none; }
 .nav-list { list-style: none; margin: 0; padding: 0; width: 180px; }
 .nav-list a {
@@ -230,7 +234,7 @@ header, section, footer { scroll-margin-top: 24px; }
   .nav-list a { border-left: 0; padding: 12px 18px; font-size: 1rem; color: var(--ink); }
   .nav-list a:hover { border-left: 0; background: #EEF1F3; }
   .nav-list a[aria-current="true"] { background: #EEF1F3; border-left: 0; }
-  main { padding-top: 84px; }
+  main { padding-top: 40px; }
   header, section, footer { scroll-margin-top: 72px; }
 }
 @media (prefers-reduced-motion: reduce) { .nav-bars i { transition: none; } }
@@ -274,4 +278,19 @@ header, section, footer { scroll-margin-top: 24px; }
 
   .place-map { height: 240px; }
   .term:hover::after, .term:focus::after { left: -8px; width: min(280px, 86vw); }
+}
+
+.p-assign { font-size: .85rem; margin: -6px 0 16px; }
+
+/* ---- Masthead: the Chicago flag, with buildings for stars ------------------- */
+.flag { position: relative; height: clamp(140px, 21vw, 300px); background: #fff; overflow: hidden;
+        border-bottom: 1px solid var(--rule); }
+.flag-stripe { position: absolute; left: 0; right: 0; height: 14%; background: var(--flag-blue); }
+.flag-stripe-top { top: 14%; }
+.flag-stripe-bottom { bottom: 14%; }
+.flag-buildings { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+                  height: 40%; width: auto; max-width: 88vw; }
+@media (max-width: 640px) {
+  .flag { height: 150px; }
+  .flag-buildings { height: 42%; }
 }

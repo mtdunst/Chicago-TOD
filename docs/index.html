@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Room to Grow: Estimating Housing Potential Near Chicago's Rail Stations</title>
+  <title>Room to grow: housing near Chicago's rail stations</title>
   <meta name="description" content="{{DESCRIPTION}}">
 
   <meta property="og:type" content="website">
@@ -17,10 +17,63 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Semi+Condensed:wght@600;700&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v={{VERSION}}">
   <link rel="icon" type="image/png" href="favicon.png">
 </head>
 <body>
+<div class="flag" role="img" aria-label="The Chicago flag, with a four-flat, a courtyard building, a mid-rise, and a skyscraper in place of its four stars">
+  <span class="flag-stripe flag-stripe-top"></span>
+  <span class="flag-stripe flag-stripe-bottom"></span>
+  <svg class="flag-buildings" viewBox="0 0 620 170" aria-hidden="true" focusable="false">
+    <g fill="#E4002B">
+      <!-- Four-flat -->
+      <rect x="20" y="96" width="62" height="74"/>
+      <rect x="16" y="90" width="70" height="7"/>
+      <!-- Courtyard building: two wings, garden court between -->
+      <rect x="132" y="86" width="44" height="84"/>
+      <rect x="236" y="86" width="44" height="84"/>
+      <rect x="176" y="104" width="60" height="66" opacity=".55"/>
+      <rect x="128" y="80" width="52" height="7"/>
+      <rect x="232" y="80" width="52" height="7"/>
+      <!-- Mid-rise -->
+      <rect x="330" y="52" width="86" height="118"/>
+      <rect x="326" y="46" width="94" height="7"/>
+      <!-- Skyscraper: stepped setbacks and a spire -->
+      <rect x="466" y="54" width="86" height="116"/>
+      <rect x="478" y="26" width="62" height="29"/>
+      <rect x="490" y="10" width="38" height="17"/>
+      <rect x="507" y="0" width="4" height="11"/>
+    </g>
+    <g fill="#FFFFFF">
+      <!-- windows: four-flat 2 x 3 -->
+      <rect x="31" y="106" width="13" height="14"/><rect x="58" y="106" width="13" height="14"/>
+      <rect x="31" y="128" width="13" height="14"/><rect x="58" y="128" width="13" height="14"/>
+      <rect x="31" y="150" width="13" height="14"/><rect x="58" y="150" width="13" height="14"/>
+      <!-- courtyard wings 2 x 4 each -->
+      <rect x="140" y="96" width="10" height="12"/><rect x="158" y="96" width="10" height="12"/>
+      <rect x="140" y="114" width="10" height="12"/><rect x="158" y="114" width="10" height="12"/>
+      <rect x="140" y="132" width="10" height="12"/><rect x="158" y="132" width="10" height="12"/>
+      <rect x="140" y="150" width="10" height="12"/><rect x="158" y="150" width="10" height="12"/>
+      <rect x="244" y="96" width="10" height="12"/><rect x="262" y="96" width="10" height="12"/>
+      <rect x="244" y="114" width="10" height="12"/><rect x="262" y="114" width="10" height="12"/>
+      <rect x="244" y="132" width="10" height="12"/><rect x="262" y="132" width="10" height="12"/>
+      <rect x="244" y="150" width="10" height="12"/><rect x="262" y="150" width="10" height="12"/>
+      <!-- mid-rise 4 x 6 -->
+      <g><rect x="340" y="62" width="11" height="11"/><rect x="358" y="62" width="11" height="11"/><rect x="377" y="62" width="11" height="11"/><rect x="395" y="62" width="11" height="11"/></g>
+      <g><rect x="340" y="80" width="11" height="11"/><rect x="358" y="80" width="11" height="11"/><rect x="377" y="80" width="11" height="11"/><rect x="395" y="80" width="11" height="11"/></g>
+      <g><rect x="340" y="98" width="11" height="11"/><rect x="358" y="98" width="11" height="11"/><rect x="377" y="98" width="11" height="11"/><rect x="395" y="98" width="11" height="11"/></g>
+      <g><rect x="340" y="116" width="11" height="11"/><rect x="358" y="116" width="11" height="11"/><rect x="377" y="116" width="11" height="11"/><rect x="395" y="116" width="11" height="11"/></g>
+      <g><rect x="340" y="134" width="11" height="11"/><rect x="358" y="134" width="11" height="11"/><rect x="377" y="134" width="11" height="11"/><rect x="395" y="134" width="11" height="11"/></g>
+      <g><rect x="340" y="152" width="11" height="11"/><rect x="358" y="152" width="11" height="11"/><rect x="377" y="152" width="11" height="11"/><rect x="395" y="152" width="11" height="11"/></g>
+      <!-- skyscraper: vertical ribbon windows -->
+      <rect x="476" y="62" width="6" height="100"/><rect x="490" y="62" width="6" height="100"/>
+      <rect x="504" y="62" width="6" height="100"/><rect x="518" y="62" width="6" height="100"/>
+      <rect x="532" y="62" width="6" height="100"/>
+      <rect x="488" y="32" width="5" height="18"/><rect x="500" y="32" width="5" height="18"/>
+      <rect x="512" y="32" width="5" height="18"/><rect x="524" y="32" width="5" height="18"/>
+    </g>
+  </svg>
+</div>
 <main>
 
   <header class="hero" id="top">
@@ -47,7 +100,8 @@
 
     <div class="layers" aria-label="Map layers">
       <label><input type="checkbox" id="lyr-rail" checked> Rail lines</label>
-      <label><input type="checkbox" id="lyr-sites"> Largest sites</label>
+      <label><input type="checkbox" id="lyr-station" checked> Parcels around the selected station</label>
+      <label><input type="checkbox" id="lyr-sites"> Largest sites citywide</label>
       <label><input type="checkbox" id="lyr-income"> Household income</label>
       <label><input type="checkbox" id="lyr-wards"> Ward boundaries</label>
     </div>
@@ -149,8 +203,8 @@
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="data/core.js"></script>
-<script src="data/rail.js"></script>
-<script src="app.js"></script>
+<script src="data/core.js?v={{VERSION}}"></script>
+<script src="data/rail.js?v={{VERSION}}"></script>
+<script src="app.js?v={{VERSION}}"></script>
 </body>
 </html>
