@@ -16,6 +16,8 @@
   const WARDS = Object.fromEntries(D.wards.map(w => [String(w.ward), w]));
   const nf = new Intl.NumberFormat('en-US');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const narrow = () => window.matchMedia('(max-width: 640px)').matches;
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
 
   // Honest precision: two significant figures, nearest 50 under 1,000
   function approx(n) {
@@ -120,9 +122,17 @@
     b.addEventListener('click', () => setScenario(s.key));
     btnWrap.appendChild(b);
   });
+  const scenSel = document.createElement('select');
+  scenSel.id = 'scenario-select';
+  scenSel.className = 'scen-select';
+  scenSel.setAttribute('aria-label', 'Scenario');
+  scenSel.innerHTML = SC.map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('');
+  scenSel.addEventListener('change', () => setScenario(scenSel.value));
+  btnWrap.after(scenSel);
   function setScenario(k) {
     state.scenario = k;
     btnWrap.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.key === k)));
+    scenSel.value = k;
     const s = SC_BY[k];
     $('scenario-desc').textContent = `${s.description} Citywide: ${homes(s.units)}.`;
     writeHash();
@@ -135,7 +145,18 @@
   // ---------------------------------------------------------------------------
   // SVG rendering, not canvas: with canvas, each pane gets its own full-size
   // canvas, and the ones on top (stations, rail) block clicks on parcels below
-  const map = L.map('map', { scrollWheelZoom: false }).setView([41.85, -87.68], 11);
+  const map = L.map('map', { scrollWheelZoom: false, zoomControl: false, dragging: !coarse })
+    .setView([41.85, -87.68], 11);
+  L.control.zoom({ position: 'topright' }).addTo(map);   // keeps clear of the menu button on phones
+  if (coarse) {
+    const hint = L.control({ position: 'topleft' });
+    hint.onAdd = () => {
+      const d = L.DomUtil.create('div', 'map-hint');
+      d.textContent = 'Use two fingers to move the map';
+      return d;
+    };
+    hint.addTo(map);
+  }
   window.TOD_MAP = map;   // handy for debugging in the browser console
   map.on('focus click', () => map.scrollWheelZoom.enable());
   map.getContainer().addEventListener('mouseleave', () => map.scrollWheelZoom.disable());
@@ -168,8 +189,25 @@
   const stationLayer = L.layerGroup().addTo(map);
   let markers = {};
 
+  // Legend titles toggle the legend open and closed (collapsed to start on phones)
+  function collapsible(div) {
+    if (narrow()) div.classList.add('collapsed');
+    L.DomEvent.disableClickPropagation(div);
+    const toggle = () => {
+      div.classList.toggle('collapsed');
+      const t = div.querySelector('.lg-title');
+      if (t) t.setAttribute('aria-expanded', String(!div.classList.contains('collapsed')));
+    };
+    div.addEventListener('click', e => { if (e.target.closest('.lg-title')) toggle(); });
+    div.addEventListener('keydown', e => {
+      if (e.target.closest('.lg-title') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(); }
+    });
+    return div;
+  }
+  const lgTitle = (t, div) => `<div class="lg-title" role="button" tabindex="0" aria-expanded="${!(div && div.classList.contains('collapsed'))}">${t}</div>`;
+
   const sizeLegend = L.control({ position: 'bottomright' });
-  sizeLegend.onAdd = () => L.DomUtil.create('div', 'map-legend');
+  sizeLegend.onAdd = () => collapsible(L.DomUtil.create('div', 'map-legend'));
   sizeLegend.addTo(map);
 
   const radius = (u, umax) => 3 + 22 * Math.sqrt(Math.max(u, 0) / umax);
@@ -194,7 +232,7 @@
     // One row per reference size, so labels never collide
     const r0 = radius(umax, umax);
     sizeLegend.getContainer().innerHTML =
-      `<div><strong>New homes near each station</strong></div>` +
+      lgTitle('New homes near each station', sizeLegend.getContainer()) +
       [umax, umax / 4, umax / 16].map(v => {
         const r = radius(v, umax);
         return `<div class="row"><svg width="${2 * r0 + 2}" height="${2 * r + 2}" aria-hidden="true">` +
@@ -257,15 +295,15 @@
           pane: 'sites', pointToLayer: noPoint,
           style: f => siteStyle(f.properties, false),
           onEachFeature: (f, l) => {
-            l.bindPopup(sitePopup(f.properties), { maxWidth: 300 });
+            l.bindPopup(sitePopup(f.properties), { maxWidth: narrow() ? 240 : 300 });
             l.on('mouseover', () => l.setStyle(siteStyle(f.properties, true)));
             l.on('mouseout', () => l.setStyle(siteStyle(f.properties, false)));
           }
         });
         sitesLegend = L.control({ position: 'bottomleft' });
         sitesLegend.onAdd = () => {
-          const d = L.DomUtil.create('div', 'map-legend');
-          d.innerHTML = '<div><strong>Site owner</strong></div>' + Object.entries(TYPE_COLOR)
+          const d = collapsible(L.DomUtil.create('div', 'map-legend'));
+          d.innerHTML = lgTitle('Site owner', d) + Object.entries(TYPE_COLOR)
             .map(([k, c]) => `<div class="row"><span class="chip" style="background:${c}"></span>${k}</div>`).join('') +
             `<div class="row"><span class="chip" style="background:${INST_FILL};outline:1px dashed #8A97A3"></span>Active school or campus (not counted)</div>`;
           return d;
@@ -288,8 +326,8 @@
         });
         incomeLegend = L.control({ position: 'bottomleft' });
         incomeLegend.onAdd = () => {
-          const d = L.DomUtil.create('div', 'map-legend');
-          d.innerHTML = '<div><strong>Median household income</strong></div>' + S.income_labels
+          const d = collapsible(L.DomUtil.create('div', 'map-legend'));
+          d.innerHTML = lgTitle('Median household income', d) + S.income_labels
             .map((t, i) => `<div class="row"><span class="chip" style="background:${INC[i]}"></span>${esc(t)}</div>`).join('');
           return d;
         };
@@ -357,6 +395,7 @@
     writeHash();
     highlight();
     renderProfile(id);
+    if (narrow()) $('profile').scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
     const s = ST_BY[id];
     if (move && s) {
       map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: !reduceMotion });
@@ -546,16 +585,19 @@
     let cum = 0, html = '';
     LEV.forEach(l => {
       const v = lev[l.key] || 0;
-      html += `<span class="lab">${esc(l.label)}</span>
+      html += `<div class="wf-row">
+        <span class="lab">${esc(l.label)}</span>
         <span class="trk"><span class="seg" style="left:${(100 * cum / total).toFixed(2)}%;width:${Math.max(100 * v / total, 0.3).toFixed(2)}%;background:${l.color}"></span></span>
-        <span class="num">${l.key === 'base' ? approx(v) : (v < 50 ? 'under 50' : '+' + approx(v))}</span>`;
+        <span class="num">${l.key === 'base' ? approx(v) : (v < 50 ? 'under 50' : '+' + approx(v))}</span></div>`;
       cum += v;
     });
-    html += `<span class="lab total">Full build-out</span>
-      <span class="trk total"><span class="seg" style="left:0;width:100%;background:var(--ink)"></span></span>
-      <span class="num total">${approx(total)}</span>`;
+    html += `<div class="wf-row total">
+      <span class="lab">Full build-out</span>
+      <span class="trk"><span class="seg" style="left:0;width:100%;background:var(--ink)"></span></span>
+      <span class="num">${approx(total)}</span></div>`;
     $('waterfall').innerHTML = html;
   }
+
 
   // ---------------------------------------------------------------------------
   // Featured places
@@ -635,6 +677,50 @@
   $('about-text').innerHTML =
     `Prepared by ${esc(S.author)}, ${esc(S.generated)}. Every figure is a rounded estimate of capacity, not a forecast. ` +
     `The code and full methods are <a href="${esc(S.repo_url)}">on GitHub</a>.`;
+
+  (function sectionNav() {
+    const items = [{ id: 'top', label: 'Top' }].concat(
+      [...document.querySelectorAll('main > section[id], main > footer[id]')]
+        .map(sec => ({ id: sec.id, label: (sec.querySelector('h2') || {}).textContent || sec.id }))
+    );
+    const nav = document.createElement('nav');
+    nav.className = 'site-nav';
+    nav.setAttribute('aria-label', 'Page sections');
+    nav.innerHTML =
+      `<button type="button" class="nav-toggle" aria-expanded="false" aria-controls="nav-list" aria-label="Page sections">` +
+      `<span class="nav-bars" aria-hidden="true"><i></i><i></i><i></i></span></button>` +
+      `<ul id="nav-list" class="nav-list">${items.map(i =>
+        `<li><a href="#${i.id}" data-id="${i.id}">${esc(i.label.trim())}</a></li>`).join('')}</ul>`;
+    document.body.prepend(nav);
+
+    const btn = nav.querySelector('.nav-toggle');
+    const setOpen = open => { nav.classList.toggle('open', open); btn.setAttribute('aria-expanded', String(open)); };
+    btn.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && nav.classList.contains('open')) { setOpen(false); btn.focus(); }
+    });
+    document.addEventListener('click', e => { if (!nav.contains(e.target)) setOpen(false); });
+
+    // Scroll in place rather than changing the URL, which holds the station and scenario
+    nav.querySelectorAll('a').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      setOpen(false);
+      const target = $(a.dataset.id);
+      if (a.dataset.id === 'top') window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+      else if (target) target.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+    }));
+
+    // Highlight the section currently on screen
+    const links = Object.fromEntries([...nav.querySelectorAll('a')].map(a => [a.dataset.id, a]));
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        Object.values(links).forEach(a => a.removeAttribute('aria-current'));
+        if (links[en.target.id]) links[en.target.id].setAttribute('aria-current', 'true');
+      });
+    }, { rootMargin: '-35% 0px -60% 0px' });
+    items.forEach(i => { const el = $(i.id); if (el) obs.observe(el); });
+  })();
 
   setScenario(state.scenario);
   setWard('');
