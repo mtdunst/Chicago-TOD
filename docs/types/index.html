@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>What should each station become? Chicago station types</title>
+<meta name="description" content="A best-fit development type for every CTA and Metra station in Chicago, with the reasons, under today's service and a Transit Future.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="styles.css?v=202610231231">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="stripe"></div>
+  <div class="mast-inner">
+    <svg class="star" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,2 61,31 92,26 72,50 92,74 61,69 50,98 39,69 8,74 28,50 8,26 39,31"/></svg>
+    <div>
+      <h1>What should each station become?</h1>
+      <p class="lede">Every CTA and Metra station in Chicago gets a best-fit type, the reasons behind it, and why the other types fit less well. Switch to Transit Future to see how better service would change the answer.</p>
+    </div>
+  </div>
+  <div class="stripe"></div>
+</header>
+
+<div class="controls" id="controls">
+  <div class="controls-inner">
+    <div class="switch" role="radiogroup" aria-label="Service scenario">
+      <button type="button" role="radio" aria-checked="true" data-scn="today">Today's service</button>
+      <button type="button" role="radio" aria-checked="false" data-scn="future">Transit Future</button>
+    </div>
+    <p class="scn-note" id="scn-note" aria-live="polite"></p>
+    <label class="search">
+      <span class="visually-hidden">Find a station</span>
+      <input id="search" type="search" list="station-list" placeholder="Find a station" autocomplete="off">
+      <datalist id="station-list"></datalist>
+    </label>
+  </div>
+</div>
+
+<main>
+  <section class="explore" aria-label="Map and station profile">
+    <div class="map-col">
+      <div id="map" role="region" aria-label="Map of stations colored by best-fit type"></div>
+      <div class="legend" id="legend" aria-label="Types on the map. Select a type to show only those stations."></div>
+      <p class="map-note">Circle size shows room for new homes on underused land. <span class="ring-key">An outlined circle</span> marks a station whose type changes in Transit Future. Hollow diamonds are stations that don't exist yet.</p>
+    </div>
+    <aside class="profile" id="profile" tabindex="-1" aria-live="polite"></aside>
+  </section>
+
+  <section class="band" id="types">
+    <h2>The six types</h2>
+    <p class="section-lede">Each station is scored from 0 to 100 against all six. The highest score is its best fit. Scores compare stations to each other, so a 70 means a station fits that type better than most, not that it is 70% suited.</p>
+    <div class="type-defs" id="type-defs"></div>
+  </section>
+
+  <section class="band" id="future">
+    <h2>What Transit Future assumes</h2>
+    <p class="section-lede">Transit Future puts the most serious service proposals on the table at once. Service is never cut: each line keeps today's schedule wherever that is already better than the target.</p>
+    <div id="assumptions"></div>
+  </section>
+
+  <section class="band" id="all">
+    <h2>All stations</h2>
+    <div class="table-tools">
+      <label>Type <select id="filter-type"><option value="">Any type</option></select></label>
+      <label class="check"><input type="checkbox" id="filter-change"> Only stations that change in Transit Future</label>
+    </div>
+    <div class="table-wrap">
+      <table id="table">
+        <thead><tr>
+          <th scope="col"><button type="button" data-sort="name">Station</button></th>
+          <th scope="col"><button type="button" data-sort="today">Today</button></th>
+          <th scope="col"><button type="button" data-sort="future">Transit Future</button></th>
+          <th scope="col" class="num"><button type="button" data-sort="cap">Room for new homes</button></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band" id="about">
+    <h2>How this works</h2>
+    <div class="prose" id="method"></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p id="foot-note"></p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="data/types.js?v=202610231231"></script>
+<script src="data/rail.js?v=202610231231"></script>
+<script src="app.js?v=202610231231"></script>
+</body>
+</html>

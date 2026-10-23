@@ -1212,6 +1212,9 @@ st_potential    <- cands %>% station_potential()
 st_potential
 
 # ---- Export for review ------------------------------------------------------
+source("tod_xway.R")
+xw  <- load_expressways(crs = st_crs(pot), near = pot)
+pot <- drop_expressway_sites(pot, xw)
 
 saveRDS(pot, "out/pot.rds")
 write_csv(top_units,        "out/top_units.csv")

@@ -1,13 +1,13 @@
 site_type,existing_sf_source,n_sites,net_units,share_units
-Other public,County records,652,17549.7619075675,0.0321339195451715
-Other public,"Estimate: footprints, imputed stories",938,117402.47927412449,0.21496598320069668
-Other public,"Estimate: footprints, recorded stories",1015,51087.73325784424,0.09354252889008519
-Other public,Estimate: no buildings in footprint layer,13177,360104.4783993816,0.6593575683640467
-Private,County records,2678,267466.6549485497,0.7280814841700727
-Private,"Estimate: footprints, imputed stories",134,24084.903730782808,0.06556246219841824
-Private,"Estimate: footprints, recorded stories",73,5893.619630356935,0.01604325342323357
-Private,Estimate: no buildings in footprint layer,604,69912.95503637452,0.19031280020827557
-Transit-owned,County records,52,6227.386393469226,0.09810300830984711
-Transit-owned,"Estimate: footprints, imputed stories",87,19728.6158038264,0.3107943586372431
-Transit-owned,"Estimate: footprints, recorded stories",48,3105.688637622913,0.04892540449136722
-Transit-owned,Estimate: no buildings in footprint layer,915,34416.346187154624,0.5421772285615426
+Other public,County records,650,17416.028374966856,0.03960529739625547
+Other public,"Estimate: footprints, imputed stories",921,115217.14823537874,0.26201205709848363
+Other public,"Estimate: footprints, recorded stories",1010,49554.722136553384,0.11269099161712501
+Other public,Estimate: no buildings in footprint layer,10122,257551.9724303712,0.5856916538881359
+Private,County records,2673,266630.72846777405,0.7336465465423784
+Private,"Estimate: footprints, imputed stories",134,24084.903730782808,0.06627070535881646
+Private,"Estimate: footprints, recorded stories",73,5893.619630356935,0.01621656180926021
+Private,Estimate: no buildings in footprint layer,586,66822.88006673112,0.18386618628954493
+Transit-owned,County records,51,6116.486089415342,0.10120372670047434
+Transit-owned,"Estimate: footprints, imputed stories",86,19728.6158038264,0.3264307991224348
+Transit-owned,"Estimate: footprints, recorded stories",48,3105.688637622913,0.05138690082900223
+Transit-owned,Estimate: no buildings in footprint layer,823,31486.56972087668,0.5209785733480886
